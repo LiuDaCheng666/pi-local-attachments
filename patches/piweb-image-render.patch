@@ -1,5 +1,5 @@
 diff --git a/components/ChatInput.tsx b/components/ChatInput.tsx
-index 567490a..9bce8c9 100644
+index 567490a..2230249 100644
 --- a/components/ChatInput.tsx
 +++ b/components/ChatInput.tsx
 @@ -24,6 +24,7 @@ import {
@@ -157,16 +157,30 @@ index 567490a..9bce8c9 100644
      if (!html || !text) return;
      const document = new DOMParser().parseFromString(html, "text/html");
      const links = Array.from(document.querySelectorAll("a[href]"), (link) => {
-@@ -1428,7 +1497,7 @@ export const ChatInput = forwardRef<ChatInputHandle, Props>(function ChatInput({
+@@ -1428,7 +1497,21 @@ export const ChatInput = forwardRef<ChatInputHandle, Props>(function ChatInput({
        ta.focus();
        ta.setSelectionRange(start + markdown.length, start + markdown.length);
      });
 -  }, [compact, processImageFiles, updateAtQuery]);
 +  }, [compact, cwd, processImageFiles, updateAtQuery]);
++
++  // Some browsers dispatch Explorer file pastes to the document rather than
++  // the textarea after a normal reload. Keep a native capture fallback.
++  useEffect(() => {
++    const handleDocumentPaste = (event: ClipboardEvent) => {
++      if (event.target === textareaRef.current) return;
++      const items = Array.from(event.clipboardData?.items ?? []);
++      const hasFile = items.some((item) => item.kind === "file") || Boolean(event.clipboardData?.files?.length);
++      if (!hasFile) return;
++      handlePaste(event as unknown as React.ClipboardEvent<HTMLTextAreaElement>);
++    };
++    document.addEventListener("paste", handleDocumentPaste, true);
++    return () => document.removeEventListener("paste", handleDocumentPaste, true);
++  }, [handlePaste]);
  
    useEffect(() => {
      if (slashQuery === null) {
-@@ -1731,6 +1800,17 @@ export const ChatInput = forwardRef<ChatInputHandle, Props>(function ChatInput({
+@@ -1731,6 +1814,17 @@ export const ChatInput = forwardRef<ChatInputHandle, Props>(function ChatInput({
              {compactError}
            </div>
          )}
@@ -350,3 +364,71 @@ index 3b18041..adaab5f 100644
                  borderRadius: 6,
                  objectFit: "contain",
                  border: "1px solid var(--border)",
+diff --git a/components/PwaRegistration.tsx b/components/PwaRegistration.tsx
+index d5c6af9..da817ed 100644
+--- a/components/PwaRegistration.tsx
++++ b/components/PwaRegistration.tsx
+@@ -8,6 +8,20 @@ export function PwaRegistration() {
+       return;
+     }
+ 
++    // Pi Web is commonly run as a local development/workbench app. Never let
++    // a stale service worker keep old ChatInput bundles alive on loopback.
++    const isLoopback = window.location.hostname === "127.0.0.1" ||
++      window.location.hostname === "localhost";
++    if (isLoopback) {
++      void navigator.serviceWorker.getRegistrations().then((registrations) =>
++        Promise.all(registrations.map((registration) => registration.unregister())),
++      );
++      void caches.keys().then((keys) =>
++        Promise.all(keys.filter((key) => key.startsWith("pi-web-")).map((key) => caches.delete(key))),
++      );
++      return;
++    }
++
+     const register = () => {
+       const appVersion = process.env.NEXT_PUBLIC_APP_VERSION ?? "dev";
+       const scriptUrl = `/sw.js?v=${encodeURIComponent(appVersion)}`;
+diff --git a/public/sw.js b/public/sw.js
+index a7405d0..0dbb1f1 100644
+--- a/public/sw.js
++++ b/public/sw.js
+@@ -64,7 +64,10 @@ self.addEventListener("fetch", (event) => {
+     PRECACHE_URLS.includes(url.pathname);
+ 
+   if (isStaticAsset) {
+-    event.respondWith(cacheFirst(request));
++    // Prefer the current build after a normal browser refresh. The previous
++    // cache-first strategy could keep an old ChatInput bundle alive, so file
++    // paste only worked after Ctrl+F5. Fall back to cache only when offline.
++    event.respondWith(networkFirst(request));
+   }
+ });
+ 
+@@ -151,14 +154,17 @@ async function fetchWithTimeout(request, timeoutMs) {
+   }
+ }
+ 
+-async function cacheFirst(request) {
+-  const cached = await caches.match(request);
+-  if (cached) return cached;
+-
+-  const response = await fetchWithTimeout(request, ASSET_TIMEOUT_MS);
+-  if (response.ok && response.type === "basic") {
+-    const cache = await caches.open(STATIC_CACHE);
+-    await cache.put(request, response.clone());
++async function networkFirst(request) {
++  try {
++    const response = await fetchWithTimeout(request, ASSET_TIMEOUT_MS);
++    if (response.ok && response.type === "basic") {
++      const cache = await caches.open(STATIC_CACHE);
++      await cache.put(request, response.clone());
++    }
++    return response;
++  } catch {
++    const cached = await caches.match(request);
++    if (cached) return cached;
++    throw new Error(`Unable to load ${request.url}`);
+   }
+-  return response;
+ }

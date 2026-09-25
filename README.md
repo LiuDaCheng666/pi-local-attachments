@@ -64,6 +64,12 @@ extensions/image-tool-results.ts
 - Agent 收到新路径后，可以使用 Pi 工具读取或处理；
 - 文件内容不会自动塞入模型上下文，只有 Agent 主动读取时才会进入上下文。
 
+### 本地刷新与缓存
+
+本补丁还处理了本地 Pi Web 的 Service Worker 缓存问题：访问 `127.0.0.1` 或 `localhost` 时，Pi Web 会自动注销旧的 Service Worker 并清理旧缓存，不让旧版 `ChatInput` 代码导致文件粘贴失效。静态资源在网络可用时优先获取当前版本，离线时才使用缓存。
+
+首次升级已有安装时，可能需要执行一次 `Ctrl+F5` 或在浏览器开发者工具中注销旧 Service Worker；之后启动 Pi Web 时会自动加载当前代码，不应再依赖强制刷新。
+
 ### 安全说明
 
 建议让 Pi Web 只监听 `127.0.0.1`。补丁沿用 Pi Web 现有的允许目录和上传安全检查。不要把文件 API 暴露到公网。解压或执行粘贴的压缩包、脚本前必须先检查内容。
@@ -129,6 +135,12 @@ Start Pi Web from the patched checkout. The patch targets Pi Web 0.9.x and may n
 - Pasting a real clipboard `File` uploads it to the local project and generates a unique name such as `scene__paste_20260925_ab12c.zip`;
 - Pi Agent receives the new path and can read or process it with local tools;
 - File bytes are not inserted into model context automatically; they enter context only when the Agent explicitly reads them.
+
+### Local refresh and caching
+
+The patch also handles the local Pi Web Service Worker cache. When running on `127.0.0.1` or `localhost`, Pi Web automatically unregisters old Service Workers and clears stale caches so an old `ChatInput` bundle cannot disable file paste. Static assets prefer the current network version and fall back to cache only when offline.
+
+After upgrading an existing installation, you may need one `Ctrl+F5` or one manual Service Worker unregister in browser developer tools. After that, starting Pi Web should load the current code without requiring a hard refresh.
 
 ### Security
 
