@@ -1,0 +1,116 @@
+diff --git a/components/MarkdownBody.tsx b/components/MarkdownBody.tsx
+index ef3e742..2a48069 100644
+--- a/components/MarkdownBody.tsx
++++ b/components/MarkdownBody.tsx
+@@ -10,6 +10,16 @@ import { MermaidBlock, CodeBlock } from "./MermaidBlock";
+ 
+ const MarkdownLinkContext = createContext(false);
+ 
++const LOCAL_IMAGE_PATH = /^(?:[a-zA-Z]:[\\/]|\\\\|\/).+\.(?:png|jpe?g|gif|webp|bmp)$/i;
++
++function isLocalImagePath(value: string): boolean {
++  return LOCAL_IMAGE_PATH.test(value.trim());
++}
++
++function normalizeImagePathForMarkdown(value: string): string {
++  return value.trim().replace(/\\/g, "/");
++}
++
+ interface MarkdownBodyProps {
+   children: string;
+   className?: string;
+@@ -31,9 +41,26 @@ function MarkdownImage({
+   const imageSrc = filePath
+     ? `/api/files/${encodeFilePathForApi(filePath)}?type=read`
+     : href;
+-  // Dynamic local paths are served directly by the file API.
++  // Keep chat thumbnails compact; clicking opens the full-size preview dialog.
+   // eslint-disable-next-line @next/next/no-img-element
+-  const image = <img src={imageSrc} alt={alt ?? ""} loading="lazy" {...props} />;
++  const image = (
++    <img
++      {...props}
++      src={imageSrc}
++      alt={alt ?? ""}
++      loading="lazy"
++      style={{
++        display: "block",
++        maxWidth: "min(100%, 480px)",
++        maxHeight: "360px",
++        width: "auto",
++        height: "auto",
++        objectFit: "contain",
++        borderRadius: 6,
++        ...props.style,
++      }}
++    />
++  );
+   if (!imageSrc || insideLink) return image;
+   return (
+     <ImagePreview src={imageSrc} alt={alt ?? ""} className="markdown-image">
+@@ -43,12 +70,31 @@ function MarkdownImage({
+ }
+ 
+ export function MarkdownBody({ children, className, isStreaming, cwd, onOpenFile }: MarkdownBodyProps) {
+-  const normalizedMarkdown = useMemo(() => normalizeDisplayMath(children), [children]);
++  const normalizedMarkdown = useMemo(() => {
++    let normalized = normalizeDisplayMath(children);
++    // Promote inline-code image paths before react-markdown turns them into
++    // <code>; this is the common format produced by agent final answers.
++    normalized = normalized.replace(/`((?:[a-zA-Z]:[\\/]|\\\\|\/)[^`\\n]+\\.(?:png|jpe?g|gif|webp|bmp))`/gi, (_match, filePath: string) =>
++      `![local render](<${normalizeImagePathForMarkdown(filePath)}>)`,
++    );
++    // Promote standalone local render paths to images.
++    return normalized.split("\n").map((line) => {
++      const value = line.trim();
++      if (isLocalImagePath(value)) {
++        return `![local render](<${normalizeImagePathForMarkdown(value)}>)`;
++      }
++      return line;
++    }).join("\n");
++  }, [children]);
+   // Stable renderer identities keep stateful blocks mounted across message hover updates.
+   const components = useMemo<Components>(() => ({
+     code({ className, children, ...props }) {
+       const lang = className?.replace("language-", "").toLowerCase() ?? "";
+       const raw = String(children);
++      const standaloneImagePath = raw.trim();
++      if (isLocalImagePath(standaloneImagePath)) {
++        return <MarkdownImage src={normalizeImagePathForMarkdown(standaloneImagePath)} cwd={cwd} />;
++      }
+       const isBlock = className?.includes("language-") || raw.includes("\n");
+       if (isBlock) {
+         if (lang === "mermaid") {
+@@ -108,6 +154,17 @@ export function MarkdownBody({ children, className, isStreaming, cwd, onOpenFile
+     img(props) {
+       return <MarkdownImage cwd={cwd} {...props} />;
+     },
++    p({ children, ...props }) {
++      const text = typeof children === "string"
++        ? children.trim()
++        : Array.isArray(children) && children.length === 1 && typeof children[0] === "string"
++          ? children[0].trim()
++          : "";
++      if (isLocalImagePath(text)) {
++        return <MarkdownImage src={normalizeImagePathForMarkdown(text)} cwd={cwd} />;
++      }
++      return <p {...props}>{children}</p>;
++    },
+     table({ children }) {
+       return (
+         <div className="markdown-table-wrap">
+diff --git a/components/MessageView.tsx b/components/MessageView.tsx
+index 3b18041..e078a31 100644
+--- a/components/MessageView.tsx
++++ b/components/MessageView.tsx
+@@ -1479,8 +1479,8 @@ function ResultImages({ images, isError }: { images: ImageContent[]; isError: bo
+               loading="lazy"
+               style={{
+                 display: "block",
+-                maxWidth: "min(100%, 720px)",
+-                maxHeight: 520,
++                maxWidth: "min(100%, 480px)",
++                maxHeight: 360,
+                 borderRadius: 6,
+                 objectFit: "contain",
+                 border: "1px solid var(--border)",
