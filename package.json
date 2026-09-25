@@ -1,11 +1,26 @@
 ﻿{
-  "name": "pi-image-display",
-  "version": "0.1.0",
-  "description": "Pi extension and Pi Web patch for displaying local image results in chat.",
-  "license": "MIT",
-  "files": ["extensions", "patches", "scripts", "README.md", "LICENSE", "SECURITY.md"],
-  "pi": {
-    "extensions": ["./extensions/image-tool-results.ts"]
-  },
-  "keywords": ["pi", "pi-web", "image", "preview", "coding-agent"]
+    "name":  "pi-image-display",
+    "version":  "0.2.0",
+    "description":  "Pi extension and Pi Web patch for local image display and clipboard file attachments.",
+    "license":  "MIT",
+    "files":  [
+                  "extensions",
+                  "patches",
+                  "scripts",
+                  "README.md",
+                  "LICENSE",
+                  "SECURITY.md"
+              ],
+    "pi":  {
+               "extensions":  [
+                                  "./extensions/image-tool-results.ts"
+                              ]
+           },
+    "keywords":  [
+                     "pi",
+                     "pi-web",
+                     "image",
+                     "preview",
+                     "coding-agent"
+                 ]
 }

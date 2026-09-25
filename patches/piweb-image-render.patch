@@ -1,3 +1,189 @@
+diff --git a/components/ChatInput.tsx b/components/ChatInput.tsx
+index 567490a..9bce8c9 100644
+--- a/components/ChatInput.tsx
++++ b/components/ChatInput.tsx
+@@ -24,6 +24,7 @@ import {
+ } from "@/lib/file-fuzzy";
+ import { FolderIcon, getFileIcon } from "./FileIcons";
+ import { ImagePreview } from "./ImagePreview";
++import { encodeFilePathForApi } from "@/lib/file-paths";
+ import { useIsMobile } from "@/hooks/useIsMobile";
+ import { useI18n } from "@/hooks/useI18n";
+ import { useChatAppearance } from "@/hooks/useChatAppearance";
+@@ -415,6 +416,31 @@ export function getUserMessageDraftImages(message: UserMessage): ChatDraftImage[
+   });
+ }
+ 
++const ABSOLUTE_FILE_PATH = /^(?:[a-zA-Z]:[\\/]|\\\\).+$/;
++
++function looksLikeAbsoluteFilePath(value: string): boolean {
++  return ABSOLUTE_FILE_PATH.test(value.trim());
++}
++
++async function uploadPastedFile(file: File, cwd: string): Promise<string> {
++  const dot = file.name.lastIndexOf(".");
++  const stem = dot > 0 ? file.name.slice(0, dot) : file.name;
++  const ext = dot > 0 ? file.name.slice(dot) : "";
++  const uniqueName = `${stem}__paste_${new Date().toISOString().replace(/[-:TZ.]/g, "").slice(0, 14)}_${Math.random().toString(36).slice(2, 7)}${ext}`;
++  const formData = new FormData();
++  formData.append("files", file, uniqueName);
++  const response = await fetch(
++    `/api/files/${encodeFilePathForApi(cwd)}?type=upload&conflict=error`,
++    { method: "POST", body: formData },
++  );
++  const result = await response.json().catch(() => ({})) as { uploaded?: string[]; error?: string };
++  const name = result.uploaded?.[0];
++  if (!response.ok || !name) {
++    throw new Error(result.error ?? `Upload failed (HTTP ${response.status})`);
++  }
++  return `${cwd.replace(/[\\/]$/, "")}\\${name}`;
++}
++
+ function revokeImagePreview(image: AttachedImage): void {
+   if (image.previewUrl.startsWith("blob:")) {
+     URL.revokeObjectURL(image.previewUrl);
+@@ -571,6 +597,8 @@ export const ChatInput = forwardRef<ChatInputHandle, Props>(function ChatInput({
+   const [attachedImages, setAttachedImages] = useState<AttachedImage[]>(() => (
+     draftKey ? draftImagesToAttachedImages(getDraft(draftKey)?.images) : []
+   ));
++  const [pastedFilePaths, setPastedFilePaths] = useState<string[]>([]);
++  const [uploadedFilePaths, setUploadedFilePaths] = useState<string[]>([]);
+   const trimmedValue = value.trimStart();
+   const bashMode = attachedImages.length === 0 && trimmedValue.startsWith("!");
+   const bashExcluded = bashMode && trimmedValue.startsWith("!!");
+@@ -852,6 +880,8 @@ export const ChatInput = forwardRef<ChatInputHandle, Props>(function ChatInput({
+   const clearInput = useCallback(() => {
+     valueRef.current = "";
+     setValue("");
++    setPastedFilePaths([]);
++    setUploadedFilePaths([]);
+     setAtQuery(null);
+     setHistoryMenuOpen(false);
+     if (draftKey) clearDraft(draftKey);
+@@ -943,14 +973,18 @@ export const ChatInput = forwardRef<ChatInputHandle, Props>(function ChatInput({
+ 
+   const handleSend = useCallback(async () => {
+     const msg = value.trim();
+-    if (!msg && !attachedImages.length) return;
++    const attachedPathText = uploadedFilePaths.length
++      ? `\n[Attached local files]\n${uploadedFilePaths.map((path) => `- ${path}`).join("\n")}`
++      : "";
++    const outgoing = `${msg}${attachedPathText}`.trim();
++    if (!outgoing && !attachedImages.length) return;
+     onAudioUnlock?.();
+     const builtinAllowed = !isStreaming || canRunBuiltinSlashCommandWhileStreaming(msg);
+     if (builtinAllowed && await runBuiltinCommand(msg)) return;
+     if (isStreaming) return;
+     clearInput();
+-    onSend(msg, attachedImages.length ? attachedImages : undefined);
+-  }, [value, attachedImages, isStreaming, runBuiltinCommand, onSend, clearInput, onAudioUnlock]);
++    onSend(outgoing, attachedImages.length ? attachedImages : undefined);
++  }, [value, uploadedFilePaths, attachedImages, isStreaming, runBuiltinCommand, onSend, clearInput, onAudioUnlock]);
+ 
+   const slashQuery = !compact && value.startsWith("/") && !/\s/.test(value.slice(1))
+     ? value.slice(1).toLowerCase()
+@@ -1181,7 +1215,11 @@ export const ChatInput = forwardRef<ChatInputHandle, Props>(function ChatInput({
+ 
+   const sendQueued = useCallback((mode: "steer" | "followup") => {
+     const msg = value.trim();
+-    if (!msg && !attachedImages.length) return;
++    const attachedPathText = uploadedFilePaths.length
++      ? `\n[Attached local files]\n${uploadedFilePaths.map((path) => `- ${path}`).join("\n")}`
++      : "";
++    const outgoing = `${msg}${attachedPathText}`.trim();
++    if (!outgoing && !attachedImages.length) return;
+     onAudioUnlock?.();
+     if (!attachedImages.length && onBuiltinCommand && canRunBuiltinSlashCommandWhileStreaming(msg)) {
+       void runBuiltinCommand(msg);
+@@ -1190,16 +1228,16 @@ export const ChatInput = forwardRef<ChatInputHandle, Props>(function ChatInput({
+     const streamingBehavior = mode === "steer" ? "steer" : "followUp";
+     if (msg.startsWith("/") && onPromptWithStreamingBehavior) {
+       clearInput();
+-      onPromptWithStreamingBehavior(msg, streamingBehavior, attachedImages.length ? attachedImages : undefined);
++      onPromptWithStreamingBehavior(outgoing, streamingBehavior, attachedImages.length ? attachedImages : undefined);
+       return;
+     }
+     clearInput();
+     if (mode === "steer" && onSteer) {
+-      onSteer(msg, attachedImages.length ? attachedImages : undefined);
++      onSteer(outgoing, attachedImages.length ? attachedImages : undefined);
+     } else if (mode === "followup" && onFollowUp) {
+-      onFollowUp(msg, attachedImages.length ? attachedImages : undefined);
++      onFollowUp(outgoing, attachedImages.length ? attachedImages : undefined);
+     }
+-  }, [value, attachedImages, onBuiltinCommand, onPromptWithStreamingBehavior, onSteer, onFollowUp, clearInput, onAudioUnlock, runBuiltinCommand]);
++  }, [value, uploadedFilePaths, attachedImages, onBuiltinCommand, onPromptWithStreamingBehavior, onSteer, onFollowUp, clearInput, onAudioUnlock, runBuiltinCommand]);
+ 
+   const getNextSlashIndex = useCallback((direction: "up" | "down" | "left" | "right") => {
+     const lastIndex = displayedSlashCommands.length - 1;
+@@ -1398,8 +1436,39 @@ export const ChatInput = forwardRef<ChatInputHandle, Props>(function ChatInput({
+       return;
+     }
+ 
++    const fileItems = items.filter((item) => item.kind === "file");
++    const clipboardFiles = Array.from(e.clipboardData?.files ?? []);
++    if (!compact && (fileItems.length || clipboardFiles.length) && cwd) {
++      e.preventDefault();
++      const itemFiles = fileItems.map((item) => item.getAsFile()).filter((f): f is File => f !== null);
++      const files = [...itemFiles, ...clipboardFiles].filter((file, index, all) =>
++        all.findIndex((candidate) => candidate.name === file.name && candidate.size === file.size) === index,
++      );
++      void Promise.all(files.map((file) => uploadPastedFile(file, cwd)))
++        .then((paths) => {
++          setPastedFilePaths((prev) => [...prev, ...paths.filter((path) => !prev.includes(path))]);
++          setUploadedFilePaths((prev) => [...prev, ...paths.filter((path) => !prev.includes(path))]);
++          // Keep the composer clean; paths are attached to the outgoing message.
++        })
++        .catch((error) => {
++          console.error("Failed to upload pasted file", error);
++        });
++      return;
++    }
++
+     const html = e.clipboardData.getData("text/html");
+-    const text = e.clipboardData.getData("text/plain");
++    const text = e.clipboardData.getData("text/plain").trim();
++    if (!html && looksLikeAbsoluteFilePath(text)) {
++      e.preventDefault();
++      const path = text;
++      setPastedFilePaths((prev) => prev.includes(path) ? prev : [...prev, path]);
++      const ta = e.currentTarget;
++      const start = ta.selectionStart;
++      const nextValue = ta.value.slice(0, start) + path + ta.value.slice(ta.selectionEnd);
++      valueRef.current = nextValue;
++      setValue(nextValue);
++      return;
++    }
+     if (!html || !text) return;
+     const document = new DOMParser().parseFromString(html, "text/html");
+     const links = Array.from(document.querySelectorAll("a[href]"), (link) => {
+@@ -1428,7 +1497,7 @@ export const ChatInput = forwardRef<ChatInputHandle, Props>(function ChatInput({
+       ta.focus();
+       ta.setSelectionRange(start + markdown.length, start + markdown.length);
+     });
+-  }, [compact, processImageFiles, updateAtQuery]);
++  }, [compact, cwd, processImageFiles, updateAtQuery]);
+ 
+   useEffect(() => {
+     if (slashQuery === null) {
+@@ -1731,6 +1800,17 @@ export const ChatInput = forwardRef<ChatInputHandle, Props>(function ChatInput({
+             {compactError}
+           </div>
+         )}
++        {/* Pasted local file paths */}
++        {pastedFilePaths.length > 0 && (
++          <div style={{ display: "flex", gap: 6, marginBottom: 6, flexWrap: "wrap" }}>
++            {pastedFilePaths.map((path) => (
++              <div key={path} style={{ display: "flex", alignItems: "center", gap: 6, maxWidth: "100%", padding: "5px 8px", border: "1px solid var(--border)", borderRadius: 6, background: "var(--bg-panel)", fontSize: 12 }}>
++                <span title={path} style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>📄 {path.split(/[\\/]/).pop() || path}</span>
++                <button type="button" onClick={() => setPastedFilePaths((prev) => prev.filter((item) => item !== path))} aria-label="Remove file path" style={{ border: "none", background: "none", color: "var(--text-muted)", cursor: "pointer" }}>×</button>
++              </div>
++            ))}
++          </div>
++        )}
+         {/* Image previews */}
+         {attachedImages.length > 0 && (
+           <div style={{ display: "flex", gap: 6, marginBottom: 6, flexWrap: "wrap" }}>
 diff --git a/components/MarkdownBody.tsx b/components/MarkdownBody.tsx
 index ef3e742..2a48069 100644
 --- a/components/MarkdownBody.tsx
@@ -100,10 +286,60 @@ index ef3e742..2a48069 100644
        return (
          <div className="markdown-table-wrap">
 diff --git a/components/MessageView.tsx b/components/MessageView.tsx
-index 3b18041..e078a31 100644
+index 3b18041..adaab5f 100644
 --- a/components/MessageView.tsx
 +++ b/components/MessageView.tsx
-@@ -1479,8 +1479,8 @@ function ResultImages({ images, isError }: { images: ImageContent[]; isError: bo
+@@ -313,6 +313,18 @@ export const MessageView = memo(function MessageView({ message, isStreaming, too
+     && prev.sessionId === next.sessionId;
+ });
+ 
++function stripAttachedLocalFilesForDisplay(text: string): { text: string; paths: string[] } {
++  const marker = "[Attached local files]";
++  const index = text.indexOf(marker);
++  if (index < 0) return { text, paths: [] };
++  const before = text.slice(0, index).trimEnd();
++  const paths = text.slice(index + marker.length)
++    .split(/\r?\n/)
++    .map((line) => line.replace(/^\s*-\s*/, "").trim())
++    .filter(Boolean);
++  return { text: before, paths };
++}
++
+ function UserMessageView({ message, cwd, onOpenFile, entryId, onFork, forking, onNavigate, onEditContent }: {
+   message: UserMessage;
+   cwd?: string;
+@@ -328,13 +340,15 @@ function UserMessageView({ message, cwd, onOpenFile, entryId, onFork, forking, o
+   const [copied, setCopied] = useState(false);
+   const [expanded, setExpanded] = useState(false);
+ 
+-  const content =
++  const rawContent =
+     typeof message.content === "string"
+       ? message.content
+       : message.content
+           .filter((b): b is TextContent => b.type === "text")
+           .map((b) => b.text)
+           .join("\n");
++  const attachedLocalFiles = stripAttachedLocalFilesForDisplay(rawContent);
++  const content = attachedLocalFiles.text;
+ 
+   const imageBlocks: ImageContent[] =
+     typeof message.content === "string"
+@@ -475,6 +489,13 @@ function UserMessageView({ message, cwd, onOpenFile, entryId, onFork, forking, o
+           ) : (
+           <>
+           {imageBlocksNode}
++          {attachedLocalFiles.paths.length > 0 && (
++            <div style={{ display: "flex", flexDirection: "column", gap: 3, marginBottom: content ? 8 : 0, fontSize: 12, color: "var(--text-muted)" }}>
++              {attachedLocalFiles.paths.map((path) => (
++                <span key={path} title={path}>📄 {path.split(/[\\/]/).pop() || path}</span>
++              ))}
++            </div>
++          )}
+           {content && <SafeMarkdownBody className="markdown-user-message" cwd={cwd} onOpenFile={onOpenFile}>{content}</SafeMarkdownBody>}
+           </>
+           )}
+@@ -1479,8 +1500,8 @@ function ResultImages({ images, isError }: { images: ImageContent[]; isError: bo
                loading="lazy"
                style={{
                  display: "block",
