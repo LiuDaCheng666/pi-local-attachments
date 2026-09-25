@@ -21,7 +21,9 @@
 - 聊天缩略图最大约为 480×360，点击后可以查看原图；
 - 工具结果内嵌图片限制为 4 MiB；
 - 不上传到云端，文件保存在运行 Pi Web 的本机当前项目目录；
-- 直接粘贴文本路径时不复制文件，仍然支持原路径传递。
+- 直接粘贴文本路径时不复制文件，仍然支持原路径传递；
+- 点击文件卡片的 `×` 会同时移除可见卡片和待发送附件，不再残留隐藏路径；
+- 支持把 `![图片](E:\\目录\\图片.png)` 这类 Windows 本地 Markdown 图片路径自动转换为 Pi Web 文件接口。
 
 ### 安装 Pi 扩展
 
@@ -99,7 +101,9 @@ It combines three parts:
 - Keep chat thumbnails at up to 480×360, with click-to-open full-size previews;
 - Cap inline tool-result images at 4 MiB;
 - Keep files on the local machine instead of uploading them to a cloud service;
-- Preserve direct text-path pasting without copying the file.
+- Preserve direct text-path pasting without copying the file;
+- Removing a file card also removes its pending attachment metadata;
+- Convert Windows local Markdown image destinations such as `![image](E:\\folder\\image.png)` to the Pi Web file API before Markdown parsing.
 
 ### Install the Pi extension
 

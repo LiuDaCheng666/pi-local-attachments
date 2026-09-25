@@ -1,5 +1,5 @@
 diff --git a/components/ChatInput.tsx b/components/ChatInput.tsx
-index 567490a..2230249 100644
+index 567490a..b3fb448 100644
 --- a/components/ChatInput.tsx
 +++ b/components/ChatInput.tsx
 @@ -24,6 +24,7 @@ import {
@@ -180,7 +180,7 @@ index 567490a..2230249 100644
  
    useEffect(() => {
      if (slashQuery === null) {
-@@ -1731,6 +1814,17 @@ export const ChatInput = forwardRef<ChatInputHandle, Props>(function ChatInput({
+@@ -1731,6 +1814,20 @@ export const ChatInput = forwardRef<ChatInputHandle, Props>(function ChatInput({
              {compactError}
            </div>
          )}
@@ -190,7 +190,10 @@ index 567490a..2230249 100644
 +            {pastedFilePaths.map((path) => (
 +              <div key={path} style={{ display: "flex", alignItems: "center", gap: 6, maxWidth: "100%", padding: "5px 8px", border: "1px solid var(--border)", borderRadius: 6, background: "var(--bg-panel)", fontSize: 12 }}>
 +                <span title={path} style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>📄 {path.split(/[\\/]/).pop() || path}</span>
-+                <button type="button" onClick={() => setPastedFilePaths((prev) => prev.filter((item) => item !== path))} aria-label="Remove file path" style={{ border: "none", background: "none", color: "var(--text-muted)", cursor: "pointer" }}>×</button>
++                <button type="button" onClick={() => {
++                setPastedFilePaths((prev) => prev.filter((item) => item !== path));
++                setUploadedFilePaths((prev) => prev.filter((item) => item !== path));
++              }} aria-label="Remove file path" style={{ border: "none", background: "none", color: "var(--text-muted)", cursor: "pointer" }}>×</button>
 +              </div>
 +            ))}
 +          </div>
@@ -199,10 +202,10 @@ index 567490a..2230249 100644
          {attachedImages.length > 0 && (
            <div style={{ display: "flex", gap: 6, marginBottom: 6, flexWrap: "wrap" }}>
 diff --git a/components/MarkdownBody.tsx b/components/MarkdownBody.tsx
-index ef3e742..2a48069 100644
+index ef3e742..82ded4c 100644
 --- a/components/MarkdownBody.tsx
 +++ b/components/MarkdownBody.tsx
-@@ -10,6 +10,16 @@ import { MermaidBlock, CodeBlock } from "./MermaidBlock";
+@@ -10,6 +10,22 @@ import { MermaidBlock, CodeBlock } from "./MermaidBlock";
  
  const MarkdownLinkContext = createContext(false);
  
@@ -216,10 +219,16 @@ index ef3e742..2a48069 100644
 +  return value.trim().replace(/\\/g, "/");
 +}
 +
++function localImageApiUrl(value: string, cwd?: string): string | null {
++  const normalized = normalizeImagePathForMarkdown(value);
++  const filePath = resolveLocalFileHref(normalized, cwd);
++  return filePath ? `/api/files/${encodeFilePathForApi(filePath)}?type=read` : null;
++}
++
  interface MarkdownBodyProps {
    children: string;
    className?: string;
-@@ -31,9 +41,26 @@ function MarkdownImage({
+@@ -31,9 +47,26 @@ function MarkdownImage({
    const imageSrc = filePath
      ? `/api/files/${encodeFilePathForApi(filePath)}?type=read`
      : href;
@@ -248,13 +257,23 @@ index ef3e742..2a48069 100644
    if (!imageSrc || insideLink) return image;
    return (
      <ImagePreview src={imageSrc} alt={alt ?? ""} className="markdown-image">
-@@ -43,12 +70,31 @@ function MarkdownImage({
+@@ -43,12 +76,41 @@ function MarkdownImage({
  }
  
  export function MarkdownBody({ children, className, isStreaming, cwd, onOpenFile }: MarkdownBodyProps) {
 -  const normalizedMarkdown = useMemo(() => normalizeDisplayMath(children), [children]);
 +  const normalizedMarkdown = useMemo(() => {
 +    let normalized = normalizeDisplayMath(children);
++    // Rewrite Markdown images with Windows/local destinations before the
++    // Markdown parser treats backslashes as escapes or strips the drive-letter
++    // URL scheme. Example: ![preview](E:\\work\\render.png).
++    normalized = normalized.replace(
++      /!\[([^\]]*)\]\(\s*<?((?:[a-zA-Z]:[\\/]|\\\\|\/)[^>\r\n)]*\.(?:png|jpe?g|gif|webp|bmp))>?\s*\)/gi,
++      (match, alt: string, filePath: string) => {
++        const apiUrl = localImageApiUrl(filePath, cwd);
++        return apiUrl ? `![${alt}](${apiUrl})` : match;
++      },
++    );
 +    // Promote inline-code image paths before react-markdown turns them into
 +    // <code>; this is the common format produced by agent final answers.
 +    normalized = normalized.replace(/`((?:[a-zA-Z]:[\\/]|\\\\|\/)[^`\\n]+\\.(?:png|jpe?g|gif|webp|bmp))`/gi, (_match, filePath: string) =>
@@ -268,7 +287,7 @@ index ef3e742..2a48069 100644
 +      }
 +      return line;
 +    }).join("\n");
-+  }, [children]);
++  }, [children, cwd]);
    // Stable renderer identities keep stateful blocks mounted across message hover updates.
    const components = useMemo<Components>(() => ({
      code({ className, children, ...props }) {
@@ -281,7 +300,7 @@ index ef3e742..2a48069 100644
        const isBlock = className?.includes("language-") || raw.includes("\n");
        if (isBlock) {
          if (lang === "mermaid") {
-@@ -108,6 +154,17 @@ export function MarkdownBody({ children, className, isStreaming, cwd, onOpenFile
+@@ -108,6 +170,17 @@ export function MarkdownBody({ children, className, isStreaming, cwd, onOpenFile
      img(props) {
        return <MarkdownImage cwd={cwd} {...props} />;
      },
