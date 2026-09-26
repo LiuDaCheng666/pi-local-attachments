@@ -1,6 +1,6 @@
 ﻿{
     "name":  "pi-local-attachments",
-    "version":  "0.2.6",
+    "version":  "0.2.7",
     "description":  "Pi extension and Pi Web patch for local image display and clipboard file attachments.",
     "license":  "MIT",
     "files":  [
