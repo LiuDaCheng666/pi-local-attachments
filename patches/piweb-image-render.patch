@@ -1,5 +1,5 @@
 diff --git a/components/ChatInput.tsx b/components/ChatInput.tsx
-index 567490a..b3fb448 100644
+index 567490a..98ff5c3 100644
 --- a/components/ChatInput.tsx
 +++ b/components/ChatInput.tsx
 @@ -24,6 +24,7 @@ import {
@@ -116,7 +116,7 @@ index 567490a..b3fb448 100644
  
    const getNextSlashIndex = useCallback((direction: "up" | "down" | "left" | "right") => {
      const lastIndex = displayedSlashCommands.length - 1;
-@@ -1398,8 +1436,39 @@ export const ChatInput = forwardRef<ChatInputHandle, Props>(function ChatInput({
+@@ -1398,8 +1436,40 @@ export const ChatInput = forwardRef<ChatInputHandle, Props>(function ChatInput({
        return;
      }
  
@@ -146,7 +146,8 @@ index 567490a..b3fb448 100644
 +    if (!html && looksLikeAbsoluteFilePath(text)) {
 +      e.preventDefault();
 +      const path = text;
-+      setPastedFilePaths((prev) => prev.includes(path) ? prev : [...prev, path]);
++      // A pasted path is plain text, not a copied File. Keep it in the
++      // composer and do not create an attachment card or hidden upload path.
 +      const ta = e.currentTarget;
 +      const start = ta.selectionStart;
 +      const nextValue = ta.value.slice(0, start) + path + ta.value.slice(ta.selectionEnd);
@@ -157,7 +158,7 @@ index 567490a..b3fb448 100644
      if (!html || !text) return;
      const document = new DOMParser().parseFromString(html, "text/html");
      const links = Array.from(document.querySelectorAll("a[href]"), (link) => {
-@@ -1428,7 +1497,21 @@ export const ChatInput = forwardRef<ChatInputHandle, Props>(function ChatInput({
+@@ -1428,7 +1498,21 @@ export const ChatInput = forwardRef<ChatInputHandle, Props>(function ChatInput({
        ta.focus();
        ta.setSelectionRange(start + markdown.length, start + markdown.length);
      });
@@ -180,7 +181,7 @@ index 567490a..b3fb448 100644
  
    useEffect(() => {
      if (slashQuery === null) {
-@@ -1731,6 +1814,20 @@ export const ChatInput = forwardRef<ChatInputHandle, Props>(function ChatInput({
+@@ -1731,6 +1815,20 @@ export const ChatInput = forwardRef<ChatInputHandle, Props>(function ChatInput({
              {compactError}
            </div>
          )}

@@ -23,6 +23,7 @@
 - 不上传到云端，文件保存在运行 Pi Web 的本机当前项目目录；
 - 直接粘贴文本路径时不复制文件，仍然支持原路径传递；
 - 点击文件卡片的 `×` 会同时移除可见卡片和待发送附件，不再残留隐藏路径；
+- 粘贴纯文本本地路径时按普通文本处理，不上传文件、不显示附件卡片，也不添加隐藏附件；
 - 支持把 `![图片](E:\\目录\\图片.png)` 这类 Windows 本地 Markdown 图片路径自动转换为 Pi Web 文件接口。
 
 ### 安装 Pi 扩展
@@ -103,6 +104,7 @@ It combines three parts:
 - Keep files on the local machine instead of uploading them to a cloud service;
 - Preserve direct text-path pasting without copying the file;
 - Removing a file card also removes its pending attachment metadata;
+- Pasting a plain-text local path is treated as normal text: it is not uploaded, does not create a file card, and does not add hidden attachment metadata;
 - Convert Windows local Markdown image destinations such as `![image](E:\\folder\\image.png)` to the Pi Web file API before Markdown parsing.
 
 ### Install the Pi extension
