@@ -2,6 +2,16 @@
 
 ## 中文
 
+### v0.2.8：按需生成与展示图片
+
+新增 `display_image`（展示已有图片）、`list_image_models`（查询服务模型）、`generate_image`（生成、保存并返回真实图片）。服务和模型来自用户在当前会话提供的连接与选择，不绑定某一家服务或固定模型；没有生成请求时不自动调用图片服务。
+
+手动安装需同时复制 `extensions/image-tool-results.ts` 和整个 `extensions/image-tools/` 文件夹到 `<PI_CODING_AGENT_DIR>/extensions/`，随后 `/reload` 或重启相应 Runtime。已有 Pi Web 图片补丁继续使用，无需为这一版重新改前端。纯聊天模式或禁用扩展的子代理不适用。
+
+支持 OpenAI 兼容的 `/models` 和 `/images/generations` 接口；暂不支持图片编辑及异步任务式接口。详细连接格式、可选配置、上下文开销和测试方法见 [图片工具说明](IMAGE-TOOLS.zh-CN.md)。
+
+回归测试：Node.js 22.18+ 或 24 执行 `node --test tests/*.test.mjs`。SDK 适配器测试可通过 `PI_TEST_SDK_LOADER` 指定本机 Pi SDK 的 `dist/core/extensions/loader.js` 文件 URL；未指定时仅该项跳过。
+
 这是一个面向 [Pi](https://github.com/badlogic/pi) 和 [Pi Web](https://github.com/agegr/pi-web) 的本地集成包。
 
 它整合了三部分：
@@ -19,8 +29,8 @@
 - 自动为粘贴文件生成唯一文件名，避免同名新文件误读旧文件；
 - 保留原始文件扩展名和文件内容；
 - 聊天缩略图最大约为 480×360，点击后可以查看原图；
-- 工具结果内嵌图片限制为 4 MiB；
-- 不上传到云端，文件保存在运行 Pi Web 的本机当前项目目录；
+- `read` 兼容扩展新增的内嵌图片限制为 4 MiB，新图片工具限制为 10 MiB；
+- 本地附件保存在运行 Pi Web 的本机；主动生图时会把提示词发送给用户选择的服务，并将返回图片保存到本机；
 - 直接粘贴文本路径时不复制文件，仍然支持原路径传递；
 - 点击文件卡片的 `×` 会同时移除可见卡片和待发送附件，不再残留隐藏路径；
 - 粘贴纯文本本地路径时按普通文本处理，不上传文件、不显示附件卡片，也不添加隐藏附件；
@@ -83,6 +93,12 @@ extensions/image-tool-results.ts
 
 ## English
 
+### v0.2.8: on-demand image tools
+
+Adds `display_image`, `list_image_models`, and `generate_image`. Generation uses the connection and model selected by the user in the current conversation; no provider/model is hardcoded and loading the extension makes no network requests. Install both `extensions/image-tool-results.ts` and the entire `extensions/image-tools/` directory, then reload Pi. The existing compatible Pi Web image patch is still required for display.
+
+Supports OpenAI-compatible `/models` and `/images/generations`, not image editing or asynchronous job APIs. Generated images are saved locally before being attached. See [configuration and usage](IMAGE-TOOLS.zh-CN.md).
+
 A local integration package for [Pi](https://github.com/badlogic/pi) and [Pi Web](https://github.com/agegr/pi-web).
 
 It combines three parts:
@@ -100,8 +116,8 @@ It combines three parts:
 - Generate unique names for pasted files so changed files with the same original name are not confused with older uploads;
 - Preserve the original extension and file content;
 - Keep chat thumbnails at up to 480×360, with click-to-open full-size previews;
-- Cap inline tool-result images at 4 MiB;
-- Keep files on the local machine instead of uploading them to a cloud service;
+- Cap fallback `read` attachments at 4 MiB and new image-tool attachments at 10 MiB;
+- Keep local attachments on this machine; requested image generation sends the prompt to the user-selected service and saves the returned image locally;
 - Preserve direct text-path pasting without copying the file;
 - Removing a file card also removes its pending attachment metadata;
 - Pasting a plain-text local path is treated as normal text: it is not uploaded, does not create a file card, and does not add hidden attachment metadata;
